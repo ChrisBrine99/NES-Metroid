@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Tilemaps;
 
 public enum SamusInput {
     Right =         0,
@@ -28,24 +29,22 @@ public class Samus : BaseEntity {
 
     private new void Start() {
         base.Start(); // Calls "BaseEntity" start function to grab various components
-        collision.size = new Vector2(10, 32);
-        collision.enabled = true;
 
         stateFlags |= 1 << (int) EntityFlag.DrawSprite;
 
         maxHitpoints = 99;
         hitpoints = maxHitpoints;
 
-        maxHspd = 2.1f;
-        maxVspd = 8.0f;
-        hAccel = 0.3f;
-        vAccel = 0.25f;
+        maxHspd = 0.125f;
+        maxVspd = -0.5f;
+        hAccel = 0.02f;
+        vAccel = 0.015f;
 
         DontDestroyOnLoad(gameObject);
         SetNextState(StateIntro);
     }
 
-    private void GetInput() {
+	private void GetInput() {
         prevInputFlags = inputFlags;
         inputFlags =    (Convert.ToUInt32(Input.GetKey(KeyCode.RightArrow))     << (int) SamusInput.Right) |
                         (Convert.ToUInt32(Input.GetKey(KeyCode.LeftArrow))      << (int) SamusInput.Left) |
@@ -56,37 +55,43 @@ public class Samus : BaseEntity {
     }
 
     private void StateIntro() {
-        GetInput();
+        GetInput(); // Gets input from the user for the current frame.
         if (IsPressed(SamusInput.Right) || IsPressed(SamusInput.Left)) {
             SetNextState(StateDefault);
         }
     }
 
     private void StateDefault() {
-        GetInput();
+        GetInput(); // Gets input from the user for the current frame.
 
-        int _movement = Convert.ToInt32(IsHeldDown(SamusInput.Right)) - Convert.ToInt32(IsHeldDown(SamusInput.Left));
-        if (_movement != 0) {
-            float _hAccel = GetHorAccel();
-            float _maxHspd = GetMaxHspd();
-            hspd += _hAccel * _movement;
-            if (hspd > _maxHspd || hspd < -_maxHspd) {
-                hspd = _maxHspd * _movement;
+        //if (!GetFlag(EntityFlag.Grounded)) {
+       //     vspd -= GetVertAccel();
+        //    if (vspd < GetMaxVspd()) { vspd = GetMaxVspd(); }
+       // }
+
+        HorizontalMovement(1.0f);
+
+        float _signHspd = Mathf.Sign(hspd);
+        float _signVspd = Mathf.Sign(vspd);
+        Vector3 _targetPosition = position.position + new Vector3(hspd + (collision.bounds.extents.x * _signHspd), vspd + (collision.bounds.extents.y * _signVspd));
+        Vector3Int _targetCell = tilemap.WorldToCell(_targetPosition);
+        if (tilemap.GetTile(_targetCell)) {
+            float _unitHspd = hspd == 0.0f ? 0.0f : _signHspd / 16.0f;
+            float _unitVspd = vspd == 0.0f ? 0.0f : _signVspd / 16.0f;
+            Vector3 _unitVector = new Vector3(_unitHspd, _unitVspd);
+            Vector3 _nextPosition = new Vector3(_unitHspd + (collision.bounds.extents.x * _signHspd), _unitVspd + (collision.bounds.extents.y * _signVspd));
+            _targetCell = tilemap.WorldToCell(position.position + _nextPosition);
+            while(tilemap.GetTile(_targetCell) == null) {
+                position.position += _unitVector;
+                _targetCell = tilemap.WorldToCell(position.position + _nextPosition);
             }
-            stateFlags |= 1 << (int) SamusFlag.Walking;
-        } else {
-            float _hAccel = GetHorAccel();
-            hspd -= _hAccel * Math.Sign(hspd);
-            if (hspd > -_hAccel && hspd < _hAccel) {
-                stateFlags &= ~(1 << (int) SamusFlag.Walking);
-                hspd = 0.0f;
-            }
+            hspd = 0.0f;
+            vspd = 0.0f;
 		}
-
-		ApplyFrameMovement(ProcessWorldCollision);
+        position.position += new Vector3(hspd, vspd);
     }
 
-    private void StateAirborune() {
+	private void StateAirbourne() {
 
     }
 
@@ -94,7 +99,34 @@ public class Samus : BaseEntity {
 
     }
 
-    private bool IsPressed(SamusInput _input)   { return (inputFlags & (1 << (int) _input)) != 0 && (prevInputFlags & (1 << (int) _input)) != 0; }
-    private bool IsReleased(SamusInput _input)  { return (inputFlags & (1 << (int) _input)) == 0 && (prevInputFlags & (1 << (int) _input)) == 0; }
+    /// <summary>
+    /// Handles horizontal movement achieved by the player pressing either the right or left movement inputs, both at the same time, (Which 
+    /// causes Samus to decelerate as if no inputs are pressed) or neither of them. When she's somersaulting in middair she will be unable to
+    /// decelerate, but will be able to in any other situation.
+    /// </summary>
+    /// <param name="_accelFactor"></param>
+    private void HorizontalMovement(float _accelFactor) {
+        int _movement = Convert.ToInt32(IsHeldDown(SamusInput.Right)) - Convert.ToInt32(IsHeldDown(SamusInput.Left));
+        if (_movement != 0) {
+            float _hAccel = GetHorAccel() * _accelFactor;
+            float _maxHspd = GetMaxHspd();
+            hspd += _hAccel * _movement;
+            if (hspd > _maxHspd || hspd < -_maxHspd) {
+                hspd = _maxHspd * _movement;
+            }
+            stateFlags |= 1 << (int) SamusFlag.Walking;
+        } else if (!GetFlag((EntityFlag) SamusFlag.JumpSpin)) {
+            float _hAccel = GetHorAccel() * _accelFactor;
+            hspd -= _hAccel * Math.Sign(hspd);
+            if (hspd > -_hAccel && hspd < _hAccel) {
+                stateFlags &= ~(1 << (int) SamusFlag.Walking);
+                hspd = 0.0f;
+            }
+        }
+    }
+
+    // 
+    private bool IsPressed(SamusInput _input)   { return (inputFlags & (1 << (int) _input)) != 0 && (prevInputFlags & (1 << (int) _input)) == 0; }
+    private bool IsReleased(SamusInput _input)  { return (inputFlags & (1 << (int) _input)) == 0 && (prevInputFlags & (1 << (int) _input)) != 0; }
     private bool IsHeldDown(SamusInput _input)  { return (inputFlags & (1 << (int) _input)) != 0; }
 }

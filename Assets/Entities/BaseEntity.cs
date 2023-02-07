@@ -21,7 +21,7 @@ public class BaseEntity : MonoBehaviour {
     protected uint hitpoints = 0;
     protected uint maxHitpoints = 0;
 
-    // 
+    // Stores the current sprite that represents the entity within the game; can be initialized within the editor.
     [SerializeField]
     protected Sprite sprite;
 
@@ -48,7 +48,7 @@ public class BaseEntity : MonoBehaviour {
     protected BoxCollider2D     collision;
     protected SpriteRenderer    spriteRenderer;
 
-    // 
+    // Stores the game's main tilemap so it can be referenced by the entity when collision with the world is checked.
     protected Tilemap tilemap;
 
     protected void Start() {
@@ -67,82 +67,6 @@ public class BaseEntity : MonoBehaviour {
         if (curState != nextState) { curState = nextState; }
         if (GetFlag(EntityFlag.Destroyed) && !GetFlag(EntityFlag.Invincible)) { Destroy(gameObject); }
         spriteRenderer.enabled = GetFlag(EntityFlag.DrawSprite);
-    }
-
-    /// <summary>
-    /// 
-    /// </summary>
-    protected delegate void CollisionFunction(float _hspd, float _vspd);
-    protected void ApplyFrameMovement(CollisionFunction _collisionFunction) {
-        // Step One: Add the previous frame's fractional values to the entity's current hspd and vspd values.
-        hspd += hspdFraction;
-        vspd += vspdFraction;
-
-        // Step Two: Perform a calculation that will isolate the fractional value from whatever the current values for hspd and vspd are.
-        hspdFraction = hspd - (Mathf.Floor(Mathf.Abs(hspd)) * Mathf.Sign(hspd));
-        vspdFraction = vspd - (Mathf.Floor(Mathf.Abs(vspd)) * Mathf.Sign(vspd));
-
-        // Step Three: Remove those fractional values from both hspd and vspd; leaving only the resulting whole numbers of each.
-        hspd -= hspdFraction;
-        vspd -= vspdFraction;
-
-        // Step Four: Call the world collision function to update the position of the entity and have it collide with the world. Note that
-        // if no valid collision function has been provided to this function, this line will do nothing.
-        _collisionFunction?.Invoke(hspd, vspd);
-    }
-
-    /// <summary>
-    /// 
-    /// </summary>
-    protected void ProcessGravity() {
-        
-	}
-
-    /// <summary>
-    /// 
-    /// </summary>
-    protected void ProcessWorldCollision(float _hspd, float _vspd) {
-        // 
-        float _signHspd = Mathf.Sign(_hspd);
-        float _collisionOffset = collision.bounds.extents.x * _signHspd;
-        Vector3 _targetPosition = position.position + new Vector3(_collisionOffset + _hspd - (0.5f * _signHspd), 0.0f);
-        Vector3Int _collisionCell = tilemap.WorldToCell(_targetPosition);
-        if (tilemap.GetTile(_collisionCell) != null) {
-            // 
-            Vector3 _offset = new Vector3(_collisionOffset + _signHspd - (0.5f * _signHspd), 0.0f);
-            Vector3Int _curCell = tilemap.WorldToCell(position.position + _offset);
-            while(tilemap.GetTile(_curCell) == null) {
-                position.position += new Vector3(_signHspd, 0.0f);
-                _curCell = tilemap.WorldToCell(position.position + _offset);
-            }
-
-            // 
-            hspd = 0.0f;
-            hspdFraction = 0.0f;
-            _hspd = 0.0f;
-		}
-        position.position += new Vector3(_hspd, 0.0f);
-
-        // 
-        float _signVspd = Mathf.Sign(_vspd);
-        _collisionOffset = collision.bounds.extents.y * _signVspd;
-        _targetPosition = position.position + new Vector3(0.0f, _collisionOffset + _vspd);
-        _collisionCell = tilemap.WorldToCell(_targetPosition);
-        if (tilemap.GetTile(_collisionCell) != null) {
-            // 
-            Vector3 _offset = new Vector3(0.0f, _collisionOffset + _signVspd);
-            Vector3Int _curCell = tilemap.WorldToCell(position.position + _offset);
-            while(tilemap.GetTile(_curCell) == null) {
-                position.position += new Vector3(0.0f, _signVspd);
-                _curCell = tilemap.WorldToCell(position.position + _offset);
-			}
-
-            // 
-            vspd = 0.0f;
-            vspdFraction = 0.0f;
-            _vspd = 0.0f;
-		}
-        position.position += new Vector3(0.0f, _vspd);
     }
 
     /// <summary>
